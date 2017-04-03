@@ -27,6 +27,10 @@
                  [com.taoensso/timbre "4.8.0"]
                  [com.taoensso/nippy "2.13.0"]
                  [io.aeron/aeron-all "1.1.0"]
+                 [org.deephacks.lmdbjni/lmdbjni "0.4.6"]
+                 [org.deephacks.lmdbjni/lmdbjni-linux64 "0.4.6"]
+                 [org.deephacks.lmdbjni/lmdbjni-win64 "0.4.6"]
+                 [org.deephacks.lmdbjni/lmdbjni-osx64 "0.4.6"]
                  [io.replikativ/hasch "0.3.3" 
                   :exclusions [org.clojure/clojurescript com.cognitect/transit-clj 
                                com.cognitect/transit-cljs org.clojure/data.fressian 
