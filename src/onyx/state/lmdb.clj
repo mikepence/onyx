@@ -2,10 +2,14 @@
   (:require [onyx.compression.nippy :refer [messaging-compress messaging-decompress]])
   (:import [org.fusesource.lmdbjni Database Env]))
 
+<<<<<<< HEAD
 ;; FIXME, lots of copied code from clj-lmdb. Clean up. Rip out / add licensing attribution.
 
 (defrecord NamedDB [env db name])
 (defrecord Txn [txn type])
+=======
+(defrecord NamedDB [env db name])
+>>>>>>> 0fbea46e583239d29bace3f30626b6421fd66cb6
 
 (defn make-named-db
   "Create a named database using an env.
@@ -80,12 +84,15 @@
        [(.getKey e) (.getValue e)])
      entries)))
 
+<<<<<<< HEAD
 (defn read-txn
   [db-record]
   (let [env (:env db-record)
         txn (.createReadTransaction env)]
     (Txn. txn :read)))
 
+=======
+>>>>>>> 0fbea46e583239d29bace3f30626b6421fd66cb6
 (defn items-from
   [db-record txn from]
   (let [db   (:db db-record)
@@ -100,6 +107,7 @@
        [(.getKey e) (.getValue e)])
      entries)))
 
+<<<<<<< HEAD
 
 
 (comment 
@@ -119,3 +127,13 @@
       (finally
        (.abort (:txn tx))))) ))
 
+=======
+(def ddd (make-named-db (System/getProperty "java.io.tmpdir")
+                        "testrepla"))
+
+(put! ddd 
+      (messaging-compress :key) 
+      (messaging-compress :value))
+
+(messaging-decompress (get! ddd (messaging-compress :key)))
+>>>>>>> 0fbea46e583239d29bace3f30626b6421fd66cb6
