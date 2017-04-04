@@ -5,6 +5,7 @@
 ;; FIXME, lots of copied code from clj-lmdb. Clean up. Rip out / add licensing attribution.
 
 (defrecord NamedDB [env db name])
+(defrecord Txn [txn type])
 
 (defn make-named-db
   "Create a named database using an env.
@@ -79,6 +80,12 @@
        [(.getKey e) (.getValue e)])
      entries)))
 
+(defn read-txn
+  [db-record]
+  (let [env (:env db-record)
+        txn (.createReadTransaction env)]
+    (Txn. txn :read)))
+
 (defn items-from
   [db-record txn from]
   (let [db   (:db db-record)
@@ -93,11 +100,22 @@
        [(.getKey e) (.getValue e)])
      entries)))
 
-(def ddd (make-named-db (System/getProperty "java.io.tmpdir")
-                        "testrepla"))
 
-(put! ddd 
-      (messaging-compress :key) 
-      (messaging-compress :value))
 
-(messaging-decompress (get! ddd (messaging-compress :key)))
+(comment 
+ (def ddd (make-named-db (str (System/getProperty "java.io.tmpdir") "newnew2")
+                         "testrepla"))
+
+ (put! ddd 
+       (messaging-compress :key) 
+       (messaging-compress :value))
+
+ (messaging-decompress (get! ddd (messaging-compress :key)))
+
+ (defn readdddd []
+   (let [tx (read-txn ddd)]
+     (try 
+      (doall (items ddd tx))
+      (finally
+       (.abort (:txn tx))))) ))
+
