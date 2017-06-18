@@ -4,6 +4,7 @@
               [schema.core :as s]
               [clojure.core.async :refer [alts!! <!! >!! <! >! timeout chan close! thread go]]
               [onyx.schema :refer [TriggerState WindowExtension Window Event]]
+              [onyx.state.memory :as st]
               [onyx.monitoring.measurements :refer [emit-latency emit-latency-value]]
               [onyx.windowing.window-extensions :as we]
               [onyx.protocol.task-state :refer :all]
@@ -37,45 +38,51 @@
         (throw (ex-info "Value returned by :trigger/emit must be either a hash-map or a sequential of hash-maps." 
                         {:value segment}))))
 
-(defrecord WindowGrouped 
-  [window-extension grouping-fn window state new-window-state-fn emitted
-   init-fn create-state-update apply-state-update super-agg-fn event-results]
+; (defrecord WindowGrouped 
+;   [window-extension grouping-fn window state new-window-state-fn emitted
+;    init-fn create-state-update apply-state-update super-agg-fn event-results]
 
-  StateEventReducer
-  (window-id [this]
-    (:window/id window))
+;   StateEventReducer
+;   (window-id [this]
+;     (:window/id window))
 
-  (apply-event [this state-event]
-    (let [ks (if (= :new-segment (:event-type state-event)) 
-               (list (:group-key state-event))
-               (keys @state))] 
-      (swap! state 
-             (fn [ss]
-               (reduce (fn [st k]
-                         (let [kstate (-> (get st k)
-                                          (or (new-window-state-fn))
-                                          (apply-event (assoc state-event :group-key k)))]
-                           (assoc ss k kstate)))
-                       ss 
-                       ks)))
-      this))
+;   (apply-event [this state-event]
+;     (let [ks (if (= :new-segment (:event-type state-event)) 
+;                (list (:group-key state-event))
+;                (st/groups state))] 
+;       ;; FIXME, shouldn't WANT IT OUT oF GROUP_KEY HERE
+;       (run! (fn [group-key]
+;               (let [kstate (-> (st/get st k)
+;                                (or (new-window-state-fn))
+;                                (apply-event (assoc state-event :group-key k)))]
+;                 (st/put! state group-key )
+;                 (assoc ss k kstate))
+;               )
+;             ks)
+;       (swap! state 
+;              (fn [ss]
+;                (reduce (fn [st k]
+;                          )
+;                        ss 
+;                        ks)))
+;       this))
 
-  (export-state [this]
-    (doall 
-      (map (fn [[k kstate]]
-             (list k (export-state kstate)))
-           @state)))
+;   (export-state [this]
+;     (doall 
+;       (map (fn [[k kstate]]
+;              (list k (export-state kstate)))
+;            @state)))
 
-  (recover-state [this stored]
-    (swap! state
-           (fn [s] 
-              (reduce (fn [s* [k kstate]]
-                        (assoc s* 
-                               k 
-                               (recover-state (new-window-state-fn) kstate)))
-                      s
-                      stored)))
-    this))
+;   (recover-state [this stored]
+;     (swap! state
+;            (fn [s] 
+;               (reduce (fn [s* [k kstate]]
+;                         (assoc s* 
+;                                k 
+;                                (recover-state (new-window-state-fn) kstate)))
+;                       s
+;                       stored)))
+;     this))
 
 (defrecord WindowUngrouped 
   [window-extension trigger-states window state init-fn emitted

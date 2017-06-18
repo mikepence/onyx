@@ -7,6 +7,7 @@
             [onyx.schema :refer [TriggerState Trigger Window Event WindowState]]
             [onyx.peer.window-state :as ws]
             [onyx.types :refer [map->TriggerState]]
+            [onyx.state.memory]
             [onyx.static.util :refer [kw->fn]]
             [onyx.static.planning :refer [only]]
             [onyx.static.uuid :refer [random-uuid]]
@@ -65,13 +66,13 @@
           (assoc :apply-state-update (:refinement/apply-state-update refinement-calls))
           map->TriggerState))))
 
-(defn new-ungrouped-window [m]
+(defn new-ungrouped-window [state-store m]
   (-> m
       (assoc :emitted (atom []))
-      (assoc :state (atom {}))
+      (assoc :state state-store)
       (ws/map->WindowUngrouped)))
 
-(defn new-grouped-window [task-map m]
+(defn new-grouped-window [task-map state-store m]
   (let [shared-trigger-emit (atom [])
         ungrouped (assoc (ws/map->WindowUngrouped m) :emitted shared-trigger-emit)] 
     (assoc (ws/map->WindowGrouped m)
@@ -79,16 +80,23 @@
            :grouping-fn (g/task-map->grouping-fn task-map)
            :new-window-state-fn (fn [] 
                                   (assoc ungrouped
-                                         :state (atom {})
+                                         :state state-store 
                                          :trigger-states
                                          (mapv (fn [ts] 
                                                   (assoc ts :state (atom ((:init-state ts) (:trigger ts)))))
                                                 (:trigger-states ungrouped)))))))
 
 (defn build-window-state [task-map m]
-  (if (g/grouped-task? task-map)
-    (new-grouped-window task-map m)
-    (new-ungrouped-window m)))
+  ;; FIXME PEERCONIFG
+  ;; FIXME PEERCONIFG
+  ;; FIXME PEERCONIFG
+  ;; FIXME PEERCONIFG
+  ;; FIXME PEERCONIFG
+  ;; FIXME PEERCONIFG
+  (let [state-store (onyx.state.memory/create-db nil nil)] 
+    (if (g/grouped-task? task-map)
+      (new-grouped-window state-store task-map m)
+      (new-ungrouped-window state-store m))))
 
 (s/defn resolve-window-state :- WindowState
   [window :- Window all-triggers :- [Trigger] task-map]
