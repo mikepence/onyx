@@ -1,7 +1,7 @@
 (ns onyx.state.lmdb
   (:require [onyx.state.protocol.db :as db]
             [onyx.compression.nippy :refer [localdb-decompress localdb-compress]])
-  (:import [org.fusesource.lmdbjni Database Env Transaction]))
+  (:import [org.fusesource.lmdbjni Database Env Transaction Entry]))
 
 (defn ^Transaction read-txn [^Env env]
    (.createReadTransaction env))
@@ -19,9 +19,22 @@
 ;            [(.getKey e) (.getValue e)])
 ;          entries)))
 
+(defn entry->group [^Entry entry deserialize-fn]
+  (second (deserialize-fn (.getKey entry))))
 
-(defn readdddd []
-   )
+(defn entry->window-id [^Entry entry deserialize-fn]
+  (first (deserialize-fn (.getKey entry))))
+
+(defn entry->extent [^Entry entry deserialize-fn]
+  (let [[_ _ extent] (deserialize-fn (.getKey entry))]
+    extent))
+
+(defn db-empty? [db env]
+  (let [txn (read-txn env)]
+    (try 
+     (zero? (count (items db txn)))
+     (finally
+      (.abort txn)))))
 
 (deftype StateBackend [^Database db ^String name ^Env env serialize-fn deserialize-fn]
   db/State
@@ -30,7 +43,8 @@
           ^bytes (serialize-fn [window-id group extent])
           ^bytes (serialize-fn v)))
   (get-extent [this window-id group extent]
-    (.get db ^bytes (serialize-fn [window-id group extent])))
+    (some-> (.get db ^bytes (serialize-fn [window-id group extent]))
+            (deserialize-fn)))
   (delete-extent! [this window-id group extent]
     (.delete db ^bytes (serialize-fn [window-id group extent])))
   (put-trigger! [this window-id trigger-id group v]
@@ -38,28 +52,51 @@
           ^bytes (serialize-fn [window-id group :trigger trigger-id])
           ^bytes (serialize-fn v)))
   (get-trigger [this window-id trigger-id group]
-    (.get db ^bytes (serialize-fn [window-id group :trigger trigger-id])))
+    (some-> (.get db ^bytes (serialize-fn [window-id group :trigger trigger-id]))
+            (deserialize-fn)))
   (groups [this window-id]
-    (let [tx (read-txn db)]
+    (let [txn (read-txn env)]
       (try 
-       (doall (map (fn [i]
-                     (println "IIS" (type i))
-                     [(deserialize-fn (.getKey i)) (deserialize-fn (.getValue i))]) 
-                   (items db tx)))
+       (->> (items db txn)
+            (map #(entry->group % deserialize-fn))
+            (distinct)
+            (doall))
        (finally
-        (.abort (:txn tx))))))
+        (.abort txn)))))
   (group-extents [this window-id group]
-    ;(keys (get-in @state [window-id group :window]))
-    )
+    (let [txn (read-txn env)]
+      (try 
+       (->> (items db txn)
+            (filter (fn [^Entry entry]
+                      (and (= window-id (entry->window-id entry deserialize-fn))
+                           (= group (entry->group entry deserialize-fn)))))
+            (map entry->extent)
+            (distinct)
+            (doall))
+       (finally
+        (.abort txn)))))
   (drop! [this]
     (.drop db true))
   (export [this window-id]
-    ; (localdb-compress (get @state window-id))
-    )
-  (restore! [this window-id bs]
-    ; (swap! state assoc window-id (localdb-decompress bs))
-    
-    ))
+    (let [txn (read-txn env)]
+      (try 
+       (->> (items db txn)
+            (filter (fn [^Entry entry]
+                      (= window-id (entry->window-id entry deserialize-fn))))
+            ;; switch to flat array
+            (map (fn [^Entry entry]
+                   (list (.getKey entry)
+                         (.getValue entry))))
+            (doall))
+       (finally
+        (.abort txn)))))
+
+  (restore! [this _ stored]
+    (when-not (db-empty? db env)
+      (throw (Exception. "LMDB db is not empty. This should never happen.")))
+    (run! (fn [[^bytes k ^bytes v]]
+            (.put db k v))
+          stored)))
 
 (defn create-db
   [peer-config db-name]
@@ -68,7 +105,7 @@
         env (doto (Env. path)
               (.setMapSize max-size))
         db (.openDatabase env db-name)]
-    (->StateBackend db name env)))
+    (->StateBackend db name env localdb-compress localdb-decompress)))
 
 (comment 
  (def db (create-db (System/getProperty "java.io.tmpdir") "mydb" 1024000))
