@@ -13,11 +13,11 @@
 (deftype StateBackend [^org.fusesource.lmdbjni.Database db ^String name ^org.fusesource.lmdbjni.Env env]
   State
   (put! [this k v]
-    (.put db k v))
+    (.put db ^bytes k ^bytes v))
   (get! [this k]
-    (.get db k))
+    (.get db ^bytes k))
   (delete! [this k]
-    (.delete db k))
+    (.delete db ^bytes k))
   (drop! [this]
     (.drop db true)))
 

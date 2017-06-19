@@ -3,6 +3,7 @@
             [onyx.extensions :as extensions]
             [onyx.peer.window-state :as ws]
             [onyx.checkpoint :as checkpoint]
+            [onyx.state.memory]
             [taoensso.timbre :refer [debug info error warn trace fatal]]
             [onyx.windowing.window-compile :as wc]))
 
@@ -86,13 +87,14 @@
 
 (defn recover-windows
   [{:keys [onyx.core/windows onyx.core/triggers onyx.core/task-id onyx.core/slot-id
-           onyx.core/job-id onyx.core/task-map onyx.core/tenancy-id] :as event}
+           onyx.core/job-id onyx.core/task-map onyx.core/tenancy-id onyx.core/peer-opts] :as event}
    recover-coordinates]
-  (let [resume-mapping (coordinates->windows-resume-point event recover-coordinates)
+  (let [state-store (onyx.state.memory/create-db peer-opts nil)
+        resume-mapping (coordinates->windows-resume-point event recover-coordinates)
         fetched (fetch-windows event resume-mapping task-id)]
     (mapv (fn [{:keys [window/id] :as window}]
             (let [win-resume-mapping (get resume-mapping id)
-                  resolved (wc/resolve-window-state window triggers task-map)]
+                  resolved (wc/resolve-window-state window triggers state-store task-map)]
               (if (= :resume (:mode win-resume-mapping))
                 (->> (lookup-fetched-state win-resume-mapping id slot-id fetched)
                      (ws/recover-state resolved))

@@ -882,8 +882,7 @@
         idle-strategy (BackoffIdleStrategy. 5
                                             5
                                             (arg-or-default :onyx.peer/idle-min-sleep-ns peer-config)
-                                            (arg-or-default :onyx.peer/idle-max-sleep-ns peer-config))
-        window-states (c/event->windows-states event)]
+                                            (arg-or-default :onyx.peer/idle-max-sleep-ns peer-config))]
     (info log-prefix "Starting task state machine:" (mapv vector (range) names))
     (->TaskStateMachine monitoring
                         (ms->ns (arg-or-default :onyx.peer/subscriber-liveness-timeout-ms peer-config))
@@ -891,7 +890,7 @@
                         (ms->ns (arg-or-default :onyx.peer/initial-sync-backoff-ms peer-config))
                         input-plugin output-plugin idle-strategy recover-idx iteration-idx batch-idx
                         (count state-fns) names state-fns task-state-index false false base-replica messenger 
-                        messenger-group coordinator event event window-states nil replica-version 
+                        messenger-group coordinator event event nil nil replica-version 
                         initialize-epoch heartbeat-ns last-heartbeat time-init-state #{})))
 
 ;; NOTE: currently, if task doesn't start before the liveness timeout, the peer will be killed

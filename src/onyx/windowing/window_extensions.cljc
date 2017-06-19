@@ -37,7 +37,7 @@
   (speculate-update [this extents segment]
     extents)
 
-  (extents [this all-extents segment]
+  (extents [this _ segment]
     (let [w-range (apply units/to-standard-units range)]
       (window-id-impl-extents range min-value window-key w-range w-range segment)))
 
@@ -49,6 +49,7 @@
       (update segment window-key units/coerce-key units)))
 
   (bounds [this window-id]
+    (println "WIND" window-id)
     (let [win-min (or min-value (get d/default-vals :onyx.windowing/min-value))
           w-range (apply to-standard-units range)]
       [(wid/extent-lower win-min w-range w-range window-id)
@@ -60,7 +61,8 @@
   (speculate-update [this extents segment]
     extents)
 
-  (extents [this all-extents segment]
+  (extents [this _ segment]
+    (println "SEGMENT" segment)
     (let [w-range (apply units/to-standard-units range)
           w-slide (apply units/to-standard-units slide)]
       (window-id-impl-extents range min-value window-key w-range w-slide segment)))
@@ -85,7 +87,7 @@
   (speculate-update [this extents segment]
     extents)
 
-  (extents [this all-extents segment]
+  (extents [this _ segment]
     ;; Always return the same window ID, the actual number
     ;; doesn't matter - as long as its constant.
     [1])
@@ -107,64 +109,64 @@
      (super-agg-fn window all (get extents e)))
    (get extents extent-1) all-extents))
 
-(defrecord SessionWindow 
-  [id task type aggregation init window-key min-value range slide timeout-gap session-key doc window]
-  IWindow
-  (speculate-update [this extents segment]
-    (let [gap (apply units/to-standard-units timeout-gap)
-          t (get segment window-key)]
-      (reduce-kv
-       (fn [all s v]
-         (if (and (= (:session-key s) (get segment session-key))
-                  (>= t (- (:session-lower-bound s) gap))
-                  (<= t (+ (:session-upper-bound s) gap)))
-           (if (>= (get segment window-key) (:session-upper-bound s))
-             (assoc all (assoc s :session-upper-bound t) v)
-             (assoc all (assoc s :session-lower-bound t) v))
-           (assoc all s v)))
-       {}
-       extents)))
+; (defrecord SessionWindow 
+;   [id task type aggregation init window-key min-value range slide timeout-gap session-key doc window]
+;   IWindow
+;   (speculate-update [this extents segment]
+;     (let [gap (apply units/to-standard-units timeout-gap)
+;           t (get segment window-key)]
+;       (reduce-kv
+;        (fn [all s v]
+;          (if (and (= (:session-key s) (get segment session-key))
+;                   (>= t (- (:session-lower-bound s) gap))
+;                   (<= t (+ (:session-upper-bound s) gap)))
+;            (if (>= (get segment window-key) (:session-upper-bound s))
+;              (assoc all (assoc s :session-upper-bound t) v)
+;              (assoc all (assoc s :session-lower-bound t) v))
+;            (assoc all s v)))
+;        {}
+;        extents)))
 
-  (extents [this all-extents segment]
-    (let [sessions (filter
-                    (fn [s]
-                      (and (= (:session-key s) (get segment session-key))
-                           (>= (get segment window-key) (:session-lower-bound s))
-                           (<= (get segment window-key) (:session-upper-bound s))))
-                    all-extents)]
-      (if (empty? sessions)
-        [{:session-key (get segment session-key)
-          :session-lower-bound (get segment window-key)
-          :session-upper-bound (get segment window-key)}]
-        sessions)))
+;   (extents [this all-extents segment]
+;     (let [sessions (filter
+;                     (fn [s]
+;                       (and (= (:session-key s) (get segment session-key))
+;                            (>= (get segment window-key) (:session-lower-bound s))
+;                            (<= (get segment window-key) (:session-upper-bound s))))
+;                     all-extents)]
+;       (if (empty? sessions)
+;         [{:session-key (get segment session-key)
+;           :session-lower-bound (get segment window-key)
+;           :session-upper-bound (get segment window-key)}]
+;         sessions)))
 
-  (merge-extents [this extents super-agg-fn segment]
-    (let [session-key (get segment session-key)]
-      (loop [ks (sort-by :session-lower-bound (filter #(= (:session-key %) session-key) (keys extents)))
-             results (into {} (filter (fn [[e v]] (not= (:session-key e) session-key)) extents))]
-        (if-not (seq ks)
-          results
-          (let [matches (take-while (fn [x]
-                                      (>= (:session-upper-bound (first ks))
-                                          (:session-lower-bound x)))
-                                    (rest ks))]
-            (if (seq matches)
-              (let [merged (super-aggregate window super-agg-fn extents (first ks) matches)
-                    new-key {:session-key (:session-key (first ks))
-                             :session-lower-bound (:session-lower-bound (first ks))
-                             :session-upper-bound (apply max (map :session-upper-bound matches))}]
-                ;; Insert it back at the head of the sequence to try
-                ;; and match further up the chain
-                (recur (conj (drop (count matches) (reverse (into (list) (rest ks)))) new-key) (assoc results new-key merged)))
-              (recur (rest ks) (assoc results (first ks) (or (get results (first ks)) (get extents (first ks)))))))))))
+;   (merge-extents [this extents super-agg-fn segment]
+;     (let [session-key (get segment session-key)]
+;       (loop [ks (sort-by :session-lower-bound (filter #(= (:session-key %) session-key) (keys extents)))
+;              results (into {} (filter (fn [[e v]] (not= (:session-key e) session-key)) extents))]
+;         (if-not (seq ks)
+;           results
+;           (let [matches (take-while (fn [x]
+;                                       (>= (:session-upper-bound (first ks))
+;                                           (:session-lower-bound x)))
+;                                     (rest ks))]
+;             (if (seq matches)
+;               (let [merged (super-aggregate window super-agg-fn extents (first ks) matches)
+;                     new-key {:session-key (:session-key (first ks))
+;                              :session-lower-bound (:session-lower-bound (first ks))
+;                              :session-upper-bound (apply max (map :session-upper-bound matches))}]
+;                 ;; Insert it back at the head of the sequence to try
+;                 ;; and match further up the chain
+;                 (recur (conj (drop (count matches) (reverse (into (list) (rest ks)))) new-key) (assoc results new-key merged)))
+;               (recur (rest ks) (assoc results (first ks) (or (get results (first ks)) (get extents (first ks)))))))))))
 
-  (uniform-units [this segment]
-    (let [units (units/standard-units-for (last timeout-gap))]
-      (update segment window-key units/coerce-key units)))
+;   (uniform-units [this segment]
+;     (let [units (units/standard-units-for (last timeout-gap))]
+;       (update segment window-key units/coerce-key units)))
 
-  (bounds [this window-id]
-    [(:session-lower-bound window-id)
-     (:session-upper-bound window-id)]))
+;   (bounds [this window-id]
+;     [(:session-lower-bound window-id)
+;      (:session-upper-bound window-id)]))
 
 (defmulti windowing-builder
   "Given a window, return the concrete type to perform
@@ -181,5 +183,5 @@
 (defmethod windowing-builder :global
   [window] map->GlobalWindow)
 
-(defmethod windowing-builder :session
-  [window] map->SessionWindow)
+; (defmethod windowing-builder :session
+;   [window] map->SessionWindow)

@@ -58,7 +58,7 @@
           (assoc :trigger trigger)
           (assoc :sync-fn sync-fn)
           (assoc :emit-fn emit-fn)
-          (assoc :state (atom (f-init-state trigger)))
+          ;(assoc :state (atom (f-init-state trigger)))
           (assoc :init-state f-init-state)
           (assoc :next-trigger-state (:trigger/next-state trigger-calls))
           (assoc :trigger-fire? (:trigger/trigger-fire? trigger-calls))
@@ -66,40 +66,8 @@
           (assoc :apply-state-update (:refinement/apply-state-update refinement-calls))
           map->TriggerState))))
 
-(defn new-ungrouped-window [state-store m]
-  (-> m
-      (assoc :emitted (atom []))
-      (assoc :state state-store)
-      (ws/map->WindowUngrouped)))
-
-(defn new-grouped-window [task-map state-store m]
-  (let [shared-trigger-emit (atom [])
-        ungrouped (assoc (ws/map->WindowUngrouped m) :emitted shared-trigger-emit)] 
-    (assoc (ws/map->WindowGrouped m)
-           :emitted shared-trigger-emit
-           :grouping-fn (g/task-map->grouping-fn task-map)
-           :new-window-state-fn (fn [] 
-                                  (assoc ungrouped
-                                         :state state-store 
-                                         :trigger-states
-                                         (mapv (fn [ts] 
-                                                  (assoc ts :state (atom ((:init-state ts) (:trigger ts)))))
-                                                (:trigger-states ungrouped)))))))
-
-(defn build-window-state [task-map m]
-  ;; FIXME PEERCONIFG
-  ;; FIXME PEERCONIFG
-  ;; FIXME PEERCONIFG
-  ;; FIXME PEERCONIFG
-  ;; FIXME PEERCONIFG
-  ;; FIXME PEERCONIFG
-  (let [state-store (onyx.state.memory/create-db nil nil)] 
-    (if (g/grouped-task? task-map)
-      (new-grouped-window state-store task-map m)
-      (new-ungrouped-window state-store m))))
-
 (s/defn resolve-window-state :- WindowState
-  [window :- Window all-triggers :- [Trigger] task-map]
+  [window :- Window all-triggers :- [Trigger] state-store task-map]
   (let [agg (:window/aggregation window)
         agg-var (if (sequential? agg) (first agg) agg)
         calls (var-get (kw->fn agg-var))
@@ -108,15 +76,20 @@
         window-triggers (->> all-triggers 
                              (filter #(= (:window/id window) (:trigger/window-id %)))
                              (mapv resolve-trigger))]
-    (build-window-state task-map 
-                        {:window-extension (-> window
-                                               (filter-ns-key-map "window")
-                                               ((w/windowing-builder window))
-                                               (assoc :window window))
-                         :trigger-states window-triggers
-                         :window window
-                         :state (atom {}) 
-                         :init-fn init-fn
-                         :create-state-update (:aggregation/create-state-update calls)
-                         :super-agg-fn (:aggregation/super-aggregation-fn calls)
-                         :apply-state-update (:aggregation/apply-state-update calls)})))
+    (ws/map->WindowExecutor
+     {:id (:window/id window)
+      :window-extension (-> window
+                            (filter-ns-key-map "window")
+                            ((w/windowing-builder window))
+                            (assoc :window window))
+      :grouping-fn (if (g/grouped-task? task-map)
+                     (g/task-map->grouping-fn task-map)
+                     (fn [_] nil))
+      :trigger-states window-triggers
+      :emitted (atom [])
+      :window window
+      :state state-store
+      :init-fn init-fn
+      :create-state-update (:aggregation/create-state-update calls)
+      :super-agg-fn (:aggregation/super-aggregation-fn calls)
+      :apply-state-update (:aggregation/apply-state-update calls)})))
