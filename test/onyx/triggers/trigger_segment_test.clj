@@ -33,7 +33,9 @@
                    :trigger/id :trigger-id}]
         task-map {}
         event {}
-        windows-state [(wc/resolve-window-state window triggers task-map)]
+        peer-config {}
+        state-store (onyx.state.memory/create-db peer-config nil)
+        windows-state [(wc/resolve-window-state window triggers state-store task-map)]
         segment1 {:event-time #inst "2016-02-18T12:56:00.910-00:00"}
         new-segment-event (assoc (t/new-state-event :new-segment event) :segment segment1)
         ws-1 (ws/fire-state-event windows-state new-segment-event)

@@ -27,7 +27,6 @@
 ;;; State initialization functions
 
 (defn segment-init-state [_]
-  (println "INIT")
   0)
 
 (defn timer-init-state
@@ -69,10 +68,6 @@
 
 (defn segment-next-state
   [{:keys [trigger/threshold]} state {:keys [event-type]}]
-  (println "NEXTSTAET" event-type
-           (inc (mod state (first threshold)))
-           
-           )
   (if (= event-type :new-segment)
     (inc (mod state (first threshold)))
     state))
@@ -107,18 +102,6 @@
   [{:keys [trigger/threshold] :as trigger}
    trigger-state
    {:keys [event-type] :as state-event}]
-  (println "FIRE?" 
-           event-type
-           trigger-state
-           (or (and (= event-type :new-segment)
-                    (= trigger-state (first threshold)))
-               (#{:job-completed :recovered} event-type))
-
-           (and (= event-type :new-segment)
-                (= trigger-state (first threshold)))
-               (#{:job-completed :recovered} event-type)
-
-           )
   (or (and (= event-type :new-segment)
            (= trigger-state (first threshold)))
       (#{:job-completed :recovered} event-type)))

@@ -88,7 +88,7 @@
       :trigger-states window-triggers
       :emitted (atom [])
       :window window
-      :state state-store
+      :state-store state-store
       :init-fn init-fn
       :create-state-update (:aggregation/create-state-update calls)
       :super-agg-fn (:aggregation/super-aggregation-fn calls)

@@ -78,7 +78,6 @@
                       trigger :- os/Trigger 
                       {:keys [lower-bound upper-bound event-type] :as state-event} :- os/StateEvent 
                       extent-state]
-  (println "TRIGGER")
   (when-not (= :job-completed event-type)
     (swap! test-state conj [lower-bound upper-bound extent-state])))
 
