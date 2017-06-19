@@ -4,6 +4,7 @@
             [onyx.peer.window-state :as ws]
             [onyx.checkpoint :as checkpoint]
             [onyx.state.memory]
+            [onyx.state.lmdb]
             [taoensso.timbre :refer [debug info error warn trace fatal]]
             [onyx.windowing.window-compile :as wc]))
 
@@ -89,7 +90,9 @@
   [{:keys [onyx.core/windows onyx.core/triggers onyx.core/task-id onyx.core/slot-id
            onyx.core/job-id onyx.core/task-map onyx.core/tenancy-id onyx.core/peer-opts] :as event}
    recover-coordinates]
-  (let [state-store (onyx.state.memory/create-db peer-opts nil)
+  (let [;; FIXME, generate db name from job id, task-id, and epoch
+        db-name (str (java.util.UUID/randomUUID))
+        state-store (onyx.state.lmdb/create-db peer-opts db-name)
         resume-mapping (coordinates->windows-resume-point event recover-coordinates)
         fetched (fetch-windows event resume-mapping task-id)]
     (mapv (fn [{:keys [window/id] :as window}]

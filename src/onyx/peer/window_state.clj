@@ -83,6 +83,7 @@
           fire-extents (if fire-all? 
                          (st/group-extents state-store id group-key)
                          (:extents state-event))]
+      (println "EXTENTS" fire-extents)
       ;(println "EXTENTS" fire-extents)
       (st/put-trigger! state-store id trigger-id group-key new-trigger-state)
       (run! (fn [extent] 

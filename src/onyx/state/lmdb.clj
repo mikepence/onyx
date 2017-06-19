@@ -19,15 +19,19 @@
 ;            [(.getKey e) (.getValue e)])
 ;          entries)))
 
-(defn entry->group [^Entry entry deserialize-fn]
-  (second (deserialize-fn (.getKey entry))))
-
 (defn entry->window-id [^Entry entry deserialize-fn]
   (first (deserialize-fn (.getKey entry))))
 
+(defn entry->group [^Entry entry deserialize-fn]
+  (second (deserialize-fn (.getKey entry))))
+
 (defn entry->extent [^Entry entry deserialize-fn]
-  (let [[_ _ extent] (deserialize-fn (.getKey entry))]
+  (let [[_ _ _ extent] (deserialize-fn (.getKey entry))]
     extent))
+
+(defn entry->type [^Entry entry deserialize-fn]
+  (let [[_ _ t] (deserialize-fn (.getKey entry))]
+    t))
 
 (defn db-empty? [db env]
   (let [txn (read-txn env)]
@@ -40,13 +44,13 @@
   db/State
   (put-extent! [this window-id group extent v]
     (.put db 
-          ^bytes (serialize-fn [window-id group extent])
+          ^bytes (serialize-fn [window-id group :extent extent])
           ^bytes (serialize-fn v)))
   (get-extent [this window-id group extent]
-    (some-> (.get db ^bytes (serialize-fn [window-id group extent]))
+    (some-> (.get db ^bytes (serialize-fn [window-id group :extent extent]))
             (deserialize-fn)))
   (delete-extent! [this window-id group extent]
-    (.delete db ^bytes (serialize-fn [window-id group extent])))
+    (.delete db ^bytes (serialize-fn [window-id group :extent extent])))
   (put-trigger! [this window-id trigger-id group v]
     (.put db 
           ^bytes (serialize-fn [window-id group :trigger trigger-id])
@@ -69,8 +73,12 @@
        (->> (items db txn)
             (filter (fn [^Entry entry]
                       (and (= window-id (entry->window-id entry deserialize-fn))
-                           (= group (entry->group entry deserialize-fn)))))
-            (map entry->extent)
+                           (= group (entry->group entry deserialize-fn))
+                           (= :extent (entry->type entry deserialize-fn)))))
+            (map (fn [e] (entry->extent e deserialize-fn)))
+            ;; FIXME shouldn't need to sort here, comparator should cover it
+            (sort)
+            ;; Shouldn't need distinct here as it should be sorted by the cmp, and we short circuit
             (distinct)
             (doall))
        (finally
@@ -106,21 +114,3 @@
               (.setMapSize max-size))
         db (.openDatabase env db-name)]
     (->StateBackend db name env localdb-compress localdb-decompress)))
-
-(comment 
- (def db (create-db (System/getProperty "java.io.tmpdir") "mydb" 1024000))
- (put! db (messaging-compress "sest") (messaging-compress "siesirnta"))
- (messaging-decompress (get! db (messaging-compress "sest")))
-
- 
-
- (def ddd (make-named-db (str (System/getProperty "java.io.tmpdir") "newnew2")
-                         "testrepla"))
-
- (put! ddd 
-       (messaging-compress :key) 
-       (messaging-compress :value))
-
- (messaging-decompress (get! ddd (messaging-compress :key)))
-
- )
