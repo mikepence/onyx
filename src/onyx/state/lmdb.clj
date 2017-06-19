@@ -40,6 +40,14 @@
      (finally
       (.abort txn)))))
 
+(defn stat [^Database db]
+  (let [stat (.stat db)]
+    {:ms-entries (.ms_entries stat)
+     :ms-psize (.ms_psize stat)
+     :ms-overflow-pages (.ms_overflow_pages stat)
+     :ms-depth (.ms_depth stat)
+     :ms-leaf-pages (.ms_leaf_pages stat)}))
+
 (deftype StateBackend [^Database db ^String name ^Env env serialize-fn deserialize-fn]
   db/State
   (put-extent! [this window-id group extent v]

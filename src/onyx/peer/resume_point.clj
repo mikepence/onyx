@@ -92,7 +92,8 @@
    recover-coordinates]
   (let [;; FIXME, generate db name from job id, task-id, and epoch
         db-name (str (java.util.UUID/randomUUID))
-        state-store (onyx.state.lmdb/create-db peer-opts db-name)
+        ;state-store (onyx.state.lmdb/create-db peer-opts db-name)
+        state-store (onyx.state.memory/create-db peer-opts db-name)
         resume-mapping (coordinates->windows-resume-point event recover-coordinates)
         fetched (fetch-windows event resume-mapping task-id)]
     (mapv (fn [{:keys [window/id] :as window}]

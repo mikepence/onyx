@@ -93,7 +93,7 @@
                                     (assoc :upper-bound (second bounds)))]
                 (when (trigger-fire? trigger new-trigger-state state-event)
                   (trigger-extent! this state-event trigger-record extent))))
-            fire-extents)
+            (sort fire-extents))
       this))
 
   (export-state [this]
