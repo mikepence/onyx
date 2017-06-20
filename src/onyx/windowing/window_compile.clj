@@ -41,13 +41,12 @@
        (into {})))
 
 (s/defn resolve-trigger :- TriggerState
-  [{:keys [trigger/sync trigger/emit trigger/refinement trigger/on trigger/window-id] :as trigger} :- Trigger]
+  [indexes {:keys [trigger/sync trigger/emit trigger/refinement trigger/on trigger/id trigger/window-id] :as trigger} :- Trigger]
   (let [refinement-calls (var-get (kw->fn refinement))
         trigger-calls (var-get (kw->fn on))]
     (validation/validate-refinement-calls refinement-calls)
     (validation/validate-trigger-calls trigger-calls)
-    (let [trigger (update trigger :trigger/id #(or % (random-uuid)))
-          f-init-state (:trigger/init-state trigger-calls)
+    (let [f-init-state (:trigger/init-state trigger-calls)
           f-init-locals (:trigger/init-locals trigger-calls)
           sync-fn (if sync (kw->fn sync))
           emit-fn (if emit (kw->fn emit))
@@ -56,9 +55,10 @@
           (filter-ns-key-map "trigger")
           (into locals)
           (assoc :trigger trigger)
+          (assoc :idx (or (get indexes [id window-id]) (throw (Exception.))))
+          (assoc :id (:trigger/id trigger))
           (assoc :sync-fn sync-fn)
           (assoc :emit-fn emit-fn)
-          ;(assoc :state (atom (f-init-state trigger)))
           (assoc :init-state f-init-state)
           (assoc :next-trigger-state (:trigger/next-state trigger-calls))
           (assoc :trigger-fire? (:trigger/trigger-fire? trigger-calls))
@@ -67,7 +67,7 @@
           map->TriggerState))))
 
 (s/defn resolve-window-state :- WindowState
-  [window :- Window all-triggers :- [Trigger] state-store task-map]
+  [{:keys [window/id] :as window} :- Window all-triggers :- [Trigger] state-store indexes task-map]
   (let [agg (:window/aggregation window)
         agg-var (if (sequential? agg) (first agg) agg)
         calls (var-get (kw->fn agg-var))
@@ -75,9 +75,10 @@
         init-fn (resolve-window-init window calls)
         window-triggers (->> all-triggers 
                              (filter #(= (:window/id window) (:trigger/window-id %)))
-                             (mapv resolve-trigger))]
+                             (mapv (partial resolve-trigger indexes)))]
     (ws/map->WindowExecutor
-     {:id (:window/id window)
+     {:id id 
+      :idx (get indexes id)
       :window-extension (-> window
                             (filter-ns-key-map "window")
                             ((w/windowing-builder window))

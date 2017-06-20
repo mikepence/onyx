@@ -86,19 +86,33 @@
                          :window/id window-id})))
       (get state window-id))))
 
+(defn state-indexes [windows triggers]
+  (into {} 
+        (map vector 
+             (into (vec (sort (map :window/id windows)))
+                   (sort (map (juxt :trigger/id :trigger/window-id) triggers))) 
+             (map short (range -32768 32767)))))
+
 (defn recover-windows
   [{:keys [onyx.core/windows onyx.core/triggers onyx.core/task-id onyx.core/slot-id
            onyx.core/job-id onyx.core/task-map onyx.core/tenancy-id onyx.core/peer-opts] :as event}
    recover-coordinates]
+  (println "WINDOWS" windows)
   (let [;; FIXME, generate db name from job id, task-id, and epoch
         db-name (str (java.util.UUID/randomUUID))
-        ;state-store (onyx.state.lmdb/create-db peer-opts db-name)
-        state-store (onyx.state.memory/create-db peer-opts db-name)
+        state-idxes (state-indexes windows triggers)
+        _ (println "WINDOWTOSHORT" state-idxes)
+        ;state-store (onyx.state.memory/create-db peer-opts db-name)
+        state-store (onyx.state.lmdb/create-db peer-opts db-name)
         resume-mapping (coordinates->windows-resume-point event recover-coordinates)
         fetched (fetch-windows event resume-mapping task-id)]
     (mapv (fn [{:keys [window/id] :as window}]
-            (let [win-resume-mapping (get resume-mapping id)
-                  resolved (wc/resolve-window-state window triggers state-store task-map)]
+            (let [resolved (wc/resolve-window-state window 
+                                                    triggers 
+                                                    state-store 
+                                                    state-idxes
+                                                    task-map)
+                  win-resume-mapping (get resume-mapping id)]
               (if (= :resume (:mode win-resume-mapping))
                 (->> (lookup-fetched-state win-resume-mapping id slot-id fetched)
                      (ws/recover-state resolved))

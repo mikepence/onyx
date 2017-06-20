@@ -2,12 +2,15 @@
   (:require [clojure.test :refer [is deftest]]
             [onyx.state.protocol.db :as s]
             [onyx.state.lmdb]
-            [onyx.state.memory]))
+            [onyx.state.serializers.windowing-key-encoder :as enc]
+            [onyx.state.serializers.windowing-key-decoder :as dec]
+            [onyx.state.memory])
+  (:import [org.agrona.concurrent UnsafeBuffer]))
 
 ;; FIXME copy in stored S3 file, convert to new format
 
 (deftest basic-state-store-test
-  (let [window-id :window1
+  (let [window-id 0
         db-name (str (java.util.UUID/randomUUID))
         ;store (onyx.state.memory/create-db {} :state-id-1)
         store (onyx.state.lmdb/create-db {} db-name)
@@ -19,15 +22,17 @@
      (s/put-extent! store window-id :group2 6 :my-value3)
      (s/delete-extent! store window-id :group2 6)
 
+     (println "GROUPS" (s/groups store window-id))
+
      ;; results
      (is (= :my-value1 (s/get-extent store window-id :group1 3)))
      (is (= :my-value2 (s/get-extent store window-id :group2 5)))
      (is (nil? (s/get-extent store window-id :group2 6)))
      (finally (s/drop! store)))))
 
-(deftest basic-state-export-restore-test
+#_(deftest basic-state-export-restore-test
   (let [db-name (str (java.util.UUID/randomUUID))
-        window-id :window1
+        window-id 0
         store (onyx.state.lmdb/create-db {} db-name)
         store-mem (onyx.state.memory/create-db {} db-name)
         ]
@@ -54,3 +59,54 @@
         (is (nil? (s/get-extent store window-id :group2 7)))
         (finally (s/drop! store2))))
      (finally (s/drop! store)))))
+
+
+(deftest serializer-test
+  (let [bs1 (byte-array 1000)
+        buf1 (UnsafeBuffer. bs1)
+        enc1 (enc/wrap bs1 buf1 0)
+        dec1 (dec/wrap buf1 0)]
+    (enc/set-type enc1 (byte 0))
+    (enc/set-state-idx enc1 1)
+    (enc/set-group enc1 2)
+    (enc/set-extent enc1 3)
+
+    (is (= (byte 0) (dec/get-type dec1)))
+    (is (= 1 (dec/get-state-idx dec1)))
+    (is (= 2 (dec/get-group dec1)))
+    (is (= 3 (dec/get-extent dec1)))
+
+
+    ))
+
+#_(deftest comparator-test
+  (let [bs1 (byte-array 1000)
+        buf1 (UnsafeBuffer. bs1)
+        bs2 (byte-array 1000)
+        buf2 (UnsafeBuffer. bs1)
+        enc1 (enc/wrap buf1 0)
+        enc2 (enc/wrap buf2 0)
+        dec1 (dec/wrap buf1 0)
+        dec2 (dec/wrap buf2 0)
+        cmp ^java.util.Comparator (onyx.state.lmdb/->Comparator buf1 dec1 buf2 dec2)]
+    (enc/set-state-idx enc1 0)
+    (enc/set-group enc1 0)
+    (enc/set-extent enc1 0)
+    (enc/set-state-idx enc2 0)
+    (enc/set-group enc2 0)
+    (enc/set-extent enc2 0)
+    (is (zero? (.compare cmp bs1 bs2)))
+    (is (zero? (.compare cmp bs2 bs1)))
+    (enc/set-state-idx enc1 1)
+    (is (pos? (.compare cmp bs1 bs2)))
+    (is (neg? (.compare cmp bs2 bs1)))
+    (enc/set-state-idx enc1 0)
+    (is (zero? (.compare cmp bs1 bs2)))
+    (is (zero? (.compare cmp bs2 bs1)))
+    (enc/set-extent enc1 1)
+    (is (pos? (.compare cmp bs1 bs2)))
+    (is (neg? (.compare cmp bs2 bs1)))
+    (enc/set-extent enc1 0)
+    (enc/set-group enc1 1)
+    (is (pos? (.compare cmp bs1 bs2)))
+    (is (neg? (.compare cmp bs2 bs1)))))

@@ -37,8 +37,8 @@
         (throw (ex-info "Value returned by :trigger/emit must be either a hash-map or a sequential of hash-maps." 
                         {:value segment}))))
 
-(defrecord WindowExecutor [window-extension grouping-fn trigger-states window id state-store init-fn emitted 
-                           create-state-update apply-state-update super-agg-fn event-results]
+(defrecord WindowExecutor [window-extension grouping-fn trigger-states window id idx state-store 
+                           init-fn emitted create-state-update apply-state-update super-agg-fn event-results]
   StateEventReducer
   (window-id [this]
     (:window/id window))
@@ -46,7 +46,7 @@
   (trigger-extent! [this state-event trigger-record extent]
     (let [{:keys [sync-fn emit-fn trigger create-state-update apply-state-update]} trigger-record
           group-key (:group-key state-event)
-          extent-state (st/get-extent state-store id group-key extent)
+          extent-state (st/get-extent state-store idx group-key extent)
           state-event (-> state-event
                           (assoc :extent extent)
                           (assoc :extent-state extent-state))
@@ -62,7 +62,7 @@
         (sync-fn (:task-event state-event) window trigger state-event extent-state))
       (when emit-segment 
         (swap! emitted (fn [em] (into em (rollup-result emit-segment)))))
-      (st/put-extent! state-store id group-key extent new-extent-state)))
+      (st/put-extent! state-store idx group-key extent new-extent-state)))
 
   (trigger [this state-event trigger-record]
     (let [{:keys [trigger trigger-fire? fire-all-extents?]} trigger-record 
@@ -70,8 +70,8 @@
                           (assoc :window window) 
                           (assoc :trigger-state trigger-record))
           group-key (:group-key state-event)
-          trigger-id (:trigger/id trigger-record)
-          trigger-state (st/get-trigger state-store id trigger-id group-key)
+          trigger-idx (:idx trigger-record)
+          trigger-state (st/get-trigger state-store trigger-idx group-key)
           ;_ (println "TRIGGERSTATE" trigger-state)
           ;; FIXME, should check if key not found, not just nil...
           trigger-state (if (nil? trigger-state)
@@ -81,11 +81,10 @@
           new-trigger-state (next-trigger-state-fn trigger trigger-state state-event)
           fire-all? (or fire-all-extents? (not= (:event-type state-event) :segment))
           fire-extents (if fire-all? 
-                         (st/group-extents state-store id group-key)
+                         (st/group-extents state-store idx group-key)
                          (:extents state-event))]
-      (println "EXTENTS" fire-extents)
       ;(println "EXTENTS" fire-extents)
-      (st/put-trigger! state-store id trigger-id group-key new-trigger-state)
+      (st/put-trigger! state-store trigger-idx group-key new-trigger-state)
       (run! (fn [extent] 
               (let [bounds (we/bounds window-extension extent)
                     state-event (-> state-event
@@ -97,10 +96,10 @@
       this))
 
   (export-state [this]
-    (st/export state-store id))
+    (st/export state-store idx))
 
   (recover-state [this bs]
-    (st/restore! state-store id bs)
+    (st/restore! state-store idx bs)
     this)
 
   (triggers! [this state-event]
@@ -112,11 +111,11 @@
   (aggregate-state [this state-event]
     (let [{:keys [segment group-key extents]} state-event]
       (run! (fn [extent] 
-              (let [extent-state (st/get-extent state-store id group-key extent)
+              (let [extent-state (st/get-extent state-store idx group-key extent)
                     extent-state (default-state-value init-fn window extent-state)
                     transition-entry (create-state-update window extent-state segment)
                     new-extent-state (apply-state-update window extent-state transition-entry)]
-                (st/put-extent! state-store id group-key extent new-extent-state)))
+                (st/put-extent! state-store idx group-key extent new-extent-state)))
             extents))
     state-event)
 
