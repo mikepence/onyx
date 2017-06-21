@@ -136,8 +136,11 @@
 
 (defn create-db
   [peer-config db-name]
-  (let [max-size 1024000
-        path (System/getProperty "java.io.tmpdir")
+  (let [max-size 10240000
+        ;; FIXME, make sure this is correct with dirname and db name
+        ;; had a case where I couldn't create again
+        path (str (System/getProperty "java.io.tmpdir") "/" (java.util.UUID/randomUUID))
+        _ (.mkdirs (java.io.File. path))
         env (doto (Env. path)
               (.setMapSize max-size))
         db (.openDatabase env db-name)

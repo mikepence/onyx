@@ -104,11 +104,7 @@
     state-event)
 
   (all-triggers! [this state-event]
-    (println "TRIGGERKEYS" )
-    ;; FIXME, have a trigger idx -> trigger map instead of a trigger states vector
-    ;; We can run through it in order anyway
     (run! (fn [[trigger-idx group-bytes group-key]] 
-            (println "IDX" trigger-idx (keys triggers))
             (trigger this
                      (-> state-event
                          (assoc :group-id group-bytes)
