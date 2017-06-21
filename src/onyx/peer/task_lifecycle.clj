@@ -34,10 +34,12 @@
             ;[onyx.peer.visualization :as viz]
             [onyx.peer.window-state :as ws]
             [onyx.peer.transform :as transform :refer [apply-fn]]
+            [onyx.state.protocol.db :as db]
+            [onyx.state.lmdb]
             [onyx.protocol.task-state :as t
              :refer [advance advanced? exec get-context get-event
-                     get-input-pipeline get-lifecycle evict-peer!
-                     get-messenger get-output-pipeline get-replica
+                     get-input-pipeline get-lifecycle evict-peer! get-state-store
+                     set-state-store! get-messenger get-output-pipeline get-replica
                      get-windows-state goto-next-batch! goto-next-iteration!
                      goto-recover! heartbeat! killed? next-epoch!
                      next-replica! new-iteration? log-state reset-event!
@@ -187,9 +189,7 @@
 (defn checkpoint-state [state]
   (let [{:keys [onyx.core/job-id onyx.core/task-id onyx.core/slot-id
                 onyx.core/storage onyx.core/monitoring onyx.core/tenancy-id]} (get-event state)
-        exported-state (->> (get-windows-state state)
-                            (map (juxt ws/window-id ws/export-state))
-                            (into {}))
+        exported-state (db/export (get-state-store state)) 
         rv (t/replica-version state)
         e (t/epoch state)
         start (System/nanoTime)
@@ -353,12 +353,15 @@
 
 (defn recover-state
   [state]
-  (let [{:keys [onyx.core/log-prefix
-                onyx.core/windows onyx.core/triggers
-                onyx.core/task-id onyx.core/job-id onyx.core/peer-opts
-                onyx.core/resume-point] :as event} (get-event state)
+  (let [{:keys [onyx.core/task-id onyx.core/peer-opts] :as event} (get-event state)
+        ;; Clean up previous db
+        ;; FIXME, generate db name from job id, task-id, and epoch
+        db-name (str (java.util.UUID/randomUUID))
+        ;state-store (onyx.state.memory/create-db peer-opts db-name)
+        state-store (onyx.state.lmdb/create-db peer-opts db-name)
+        _ (set-state-store! state state-store)
         {:keys [recover-coordinates]} (get-context state)
-        recovered-windows (res/recover-windows event recover-coordinates)]
+        recovered-windows (res/recover-windows event state-store recover-coordinates)]
     (-> state
         (set-windows-state! recovered-windows)
         ;; Notify triggers that we have recovered our windows
@@ -636,6 +639,7 @@
    ^:unsynchronized-mutable messenger
    messenger-group
    ^:unsynchronized-mutable coordinator
+   ^:unsynchronized-mutable state-store
    init-event
    ^:unsynchronized-mutable event
    ^:unsynchronized-mutable windows-state
@@ -802,6 +806,11 @@
     this)
   (get-messenger [this]
     messenger)
+  (set-state-store! [this new-state-store]
+    (set! state-store new-state-store)
+    this)
+  (get-state-store [this]
+    state-store)
   (set-coordinator! [this next-coordinator]
     (set! coordinator next-coordinator)
     this)
@@ -890,7 +899,7 @@
                         (ms->ns (arg-or-default :onyx.peer/initial-sync-backoff-ms peer-config))
                         input-plugin output-plugin idle-strategy recover-idx iteration-idx batch-idx
                         (count state-fns) names state-fns task-state-index false false base-replica messenger 
-                        messenger-group coordinator event event nil nil replica-version 
+                        messenger-group coordinator nil event event nil nil replica-version 
                         initialize-epoch heartbeat-ns last-heartbeat time-init-state #{})))
 
 ;; NOTE: currently, if task doesn't start before the liveness timeout, the peer will be killed

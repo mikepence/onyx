@@ -1,6 +1,7 @@
 (ns onyx.state.state-store-test
   (:require [clojure.test :refer [is deftest]]
             [onyx.state.protocol.db :as s]
+            [onyx.compression.nippy :refer [localdb-decompress localdb-compress]]
             [onyx.state.lmdb]
             [onyx.state.serializers.windowing-key-encoder :as enc]
             [onyx.state.serializers.windowing-key-decoder :as dec]
@@ -13,21 +14,37 @@
   (let [window-id 0
         db-name (str (java.util.UUID/randomUUID))
         ;store (onyx.state.memory/create-db {} :state-id-1)
-        store (onyx.state.lmdb/create-db {} db-name)
-        ]
+        store (onyx.state.lmdb/create-db {} db-name)]
     (try
-     ;; actions
-     (s/put-extent! store window-id :group1 3 :my-value1)
-     (s/put-extent! store window-id :group2 5 :my-value2)
-     (s/put-extent! store window-id :group2 6 :my-value3)
-     (s/delete-extent! store window-id :group2 6)
+     (let [group-id-1 (s/group-id store :group1)
+           group-id-2 (s/group-id store :group2)]
+       (println "IDS" group-id-1 group-id-2)
+       (println "ENCODING YEP" 3)
+       ;; actions
+       (s/put-extent! store window-id group-id-1 3 :my-value1)
 
-     (println "GROUPS" (s/groups store window-id))
+       (println "ENCODING YEP" 5)
+       (s/put-extent! store window-id group-id-2 5 :my-value2)
+       (println "ENCODING YEP" 6)
+       (s/put-extent! store window-id group-id-2 6 :my-value3)
+       ;; new extent, out of order
+       (println "ENCODING YEP" 3)
+       (s/put-extent! store window-id group-id-2 3 :my-value3)
 
-     ;; results
-     (is (= :my-value1 (s/get-extent store window-id :group1 3)))
-     (is (= :my-value2 (s/get-extent store window-id :group2 5)))
-     (is (nil? (s/get-extent store window-id :group2 6)))
+
+       (println "GROUPS" (s/groups store window-id))
+       (println "GROUPS" (s/groups store 3))
+       (is (= [3] (s/group-extents store window-id group-id-1)))
+       ; (is (= [3 5 6] (s/group-extents store window-id group-id-2)))
+
+       ; (s/delete-extent! store window-id group-id-2 6)
+       ; (is (= [3 5] (s/group-extents store window-id group-id-2)))
+
+       ; ;; results
+       ; (is (= :my-value1 (s/get-extent store window-id group-id-1 3)))
+       ; (is (= :my-value2 (s/get-extent store window-id group-id-2 5)))
+       ; (is (nil? (s/get-extent store window-id group-id-2 6)))
+       )
      (finally (s/drop! store)))))
 
 #_(deftest basic-state-export-restore-test
@@ -45,12 +62,14 @@
      (is (= (sort (s/groups store window-id)) 
             (sort (s/groups store-mem window-id))))
 
-     (let [exported (s/export store window-id)
+     (let [exported (s/export-state store window-id)
+           exported-groups (s/export-groups store)
            ;store2 (onyx.state.memory/create-db {} :state-id-2)
            db-name (str (java.util.UUID/randomUUID))
            store2 (onyx.state.lmdb/create-db {} db-name)]
        (try
-        (s/restore! store2 window-id exported)
+        (s/restore! store2 exported)
+        (s/restore! store2 exported-groups)
         (is (= (s/groups store window-id) 
                (s/groups store2 window-id)))
         (is (= :my-value1 (s/get-extent store2 window-id :group1 3)))
@@ -68,12 +87,13 @@
         dec1 (dec/wrap buf1 0)]
     (enc/set-type enc1 (byte 0))
     (enc/set-state-idx enc1 1)
-    (enc/set-group enc1 2)
+    (enc/set-group enc1 (localdb-compress 2))
+    (println "ENCODING YEP" 3)
     (enc/set-extent enc1 3)
 
     (is (= (byte 0) (dec/get-type dec1)))
     (is (= 1 (dec/get-state-idx dec1)))
-    (is (= 2 (dec/get-group dec1)))
+    (is (= 2 (localdb-decompress (dec/get-group dec1))))
     (is (= 3 (dec/get-extent dec1)))
 
 

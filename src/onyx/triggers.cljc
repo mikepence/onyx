@@ -102,6 +102,7 @@
   [{:keys [trigger/threshold] :as trigger}
    trigger-state
    {:keys [event-type] :as state-event}]
+  (println "STATE" trigger-state "vs" (first threshold))
   (or (and (= event-type :new-segment)
            (= trigger-state (first threshold)))
       (#{:job-completed :recovered} event-type)))

@@ -17,13 +17,14 @@
   (groups [this window-id]
     (keys (get @state window-id)))
   (group-extents [this window-id group]
-    (keys (get-in @state [window-id group :window])))
+    (keys (get-in @state [window-id group])))
   (drop! [this]
     (reset! state nil))
-  (export [this window-id]
-    (localdb-compress (get @state window-id)))
-  (restore! [this window-id bs]
-    (swap! state assoc window-id (localdb-decompress bs))))
+  (export [this]
+    (localdb-compress @state))
+  (restore! [this exported]
+    (throw (Exception. "NOTIMPLEMENTED"))
+    #_(swap! state assoc window-id (localdb-decompress exported))))
 
 (defn create-db
   [peer-config _]

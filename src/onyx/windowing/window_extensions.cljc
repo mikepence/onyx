@@ -49,7 +49,6 @@
       (update segment window-key units/coerce-key units)))
 
   (bounds [this window-id]
-    (println "WINDOWID" window-id)
     (let [win-min (or min-value (get d/default-vals :onyx.windowing/min-value))
           w-range (apply to-standard-units range)]
       [(wid/extent-lower win-min w-range w-range window-id)
