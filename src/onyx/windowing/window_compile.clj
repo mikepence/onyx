@@ -73,9 +73,11 @@
         calls (var-get (kw->fn agg-var))
         _ (validation/validate-state-aggregation-calls calls)
         init-fn (resolve-window-init window calls)
-        window-triggers (->> all-triggers 
-                             (filter #(= (:window/id window) (:trigger/window-id %)))
-                             (mapv (partial resolve-trigger indexes)))]
+        triggers (->> all-triggers 
+                      (filter #(= (:window/id window) (:trigger/window-id %)))
+                      (map (partial resolve-trigger indexes))
+                      (map (juxt :idx identity))
+                      (into {}))]
     (ws/map->WindowExecutor
      {:id id 
       :idx (get indexes id)
@@ -86,7 +88,7 @@
       :grouping-fn (if (g/grouped-task? task-map)
                      (g/task-map->grouping-fn task-map)
                      (fn [_] nil))
-      :trigger-states window-triggers
+      :triggers triggers
       :emitted (atom [])
       :window window
       :state-store state-store

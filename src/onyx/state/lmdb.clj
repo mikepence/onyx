@@ -67,21 +67,40 @@
             (into #{}))
        (finally
         (.abort txn)))))
+  (trigger-keys [this]
+    (let [txn (read-txn env)]
+      (try 
+       (let [seek-key (encode-key key-enc trigger-type-id Short/MIN_VALUE (byte-array 0) Long/MIN_VALUE)
+             iterator (.seek db txn ^bytes seek-key)
+             vs (transient [])] 
+         (loop []
+           (if (.hasNext iterator)
+             (let [entry ^Entry (.next iterator)]
+               (dec/wrap-impl key-dec (.getKey entry))
+               (when (trigger-value-type entry)
+                 (conj! vs [(dec/get-state-idx key-dec)
+                            (dec/get-group key-dec)
+                            (db/group-key this (dec/get-group key-dec))])
+                 (recur)))))
+         (persistent! vs))
+       (finally 
+        (.abort txn)))))
   (group-extents [this window-idx group-id]
     (let [txn (read-txn env)]
       (try 
        (let [seek-key (encode-key key-enc window-type-id window-idx (byte-array 0) Long/MIN_VALUE)
-             iterator (.seek db txn ^bytes seek-key)] 
-         (loop [vs []]
+             iterator (.seek db txn ^bytes seek-key)
+             vs (transient [])] 
+         (loop []
            (if (.hasNext iterator)
              (let [entry ^Entry (.next iterator)]
                (dec/wrap-impl key-dec (.getKey entry))
-               (if-not (and (window-value-type entry)
-                            (= (alength ^bytes group-id) (dec/get-group-len key-dec))
-                            (equals (dec/get-group key-dec) group-id))
-                 vs
-                 (recur (conj vs (dec/get-extent key-dec)))))
-             vs)))
+               (when (and (window-value-type entry)
+                          (= (alength ^bytes group-id) (dec/get-group-len key-dec))
+                          (equals (dec/get-group key-dec) group-id))
+                 (conj! vs (dec/get-extent key-dec))
+                 (recur)))))
+         (persistent! vs))
        (finally 
         (.abort txn)))))
   (drop! [this]

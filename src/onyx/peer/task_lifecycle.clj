@@ -365,7 +365,8 @@
     (-> state
         (set-windows-state! recovered-windows)
         ;; Notify triggers that we have recovered our windows
-        (ws/assign-windows :recovered)
+        ;; FIXME group window fires after recover is broken
+        ;;; (ws/assign-windows :recovered)
         (advance))))
 
 (defn recover-output [state]

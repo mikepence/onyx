@@ -13,4 +13,5 @@
   (group-extents [this window-id group])
   (drop! [this])
   (export [this])
+  (trigger-keys [this])
   (restore! [this stored]))

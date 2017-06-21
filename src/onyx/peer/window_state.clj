@@ -21,7 +21,8 @@
   (window-id [this])
   (trigger-extent! [this state-event trigger-record extent])
   (trigger [this state-event trigger-record])
-  (triggers! [this state-event])
+  (segment-triggers! [this state-event])
+  (all-triggers! [this state-event])
   (aggregate-state [this state-event])
   (apply-extents [this state-event])
   (apply-event [this state-event]))
@@ -35,7 +36,7 @@
         (throw (ex-info "Value returned by :trigger/emit must be either a hash-map or a sequential of hash-maps." 
                         {:value segment}))))
 
-(defrecord WindowExecutor [window-extension grouping-fn trigger-states window id idx state-store 
+(defrecord WindowExecutor [window-extension grouping-fn triggers window id idx state-store 
                            init-fn emitted create-state-update apply-state-update super-agg-fn event-results]
   StateEventReducer
   (window-id [this]
@@ -83,19 +84,37 @@
       ;(println "EXTENTS" fire-extents)
       (st/put-trigger! state-store trigger-idx group-id new-trigger-state)
       (run! (fn [extent] 
-              (let [bounds (we/bounds window-extension extent)
+              (let [[lower upper] (we/bounds window-extension extent)
                     state-event (-> state-event
-                                    (assoc :lower-bound (first bounds))
-                                    (assoc :upper-bound (second bounds)))]
+                                    (assoc :lower-bound lower)
+                                    (assoc :upper-bound upper))]
                 (when (trigger-fire? trigger new-trigger-state state-event)
                   (trigger-extent! this state-event trigger-record extent))))
+            ;; FIXME, shouldn't be any need to sort here
+            ;; FIXME, shouldn't be any need to sort here
             (sort fire-extents))
       this))
 
-  (triggers! [this state-event]
-    (run! (fn [trigger-state] 
+  (segment-triggers! [this state-event]
+    ;; FIXME, have a trigger idx -> trigger map instead of a trigger states vector
+    ;; We can run through it in order anyway
+    (run! (fn [[idx trigger-state]] 
             (trigger this state-event trigger-state))
-          trigger-states)
+          triggers)
+    state-event)
+
+  (all-triggers! [this state-event]
+    (println "TRIGGERKEYS" )
+    ;; FIXME, have a trigger idx -> trigger map instead of a trigger states vector
+    ;; We can run through it in order anyway
+    (run! (fn [[trigger-idx group-bytes group-key]] 
+            (println "IDX" trigger-idx (keys triggers))
+            (trigger this
+                     (-> state-event
+                         (assoc :group-id group-bytes)
+                         (assoc :group-key group-key)) 
+                     (get triggers trigger-idx)))
+          (st/trigger-keys state-store))
     state-event)
 
   (aggregate-state [this state-event]
@@ -135,14 +154,8 @@
              (apply-extents this)
              (aggregate-state this)
              (merge-extents-fn this)
-             (triggers! this)))
-
-      ;; FIXME FIXME FIXME
-      ;; FIXME FIXME FIXME
-      ;; FIXME FIXME FIXME
-      ;; FIXME FIXME FIXME
-      ;; FIXME FIXME FIXME
-      #_(triggers! this state-event))
+             (segment-triggers! this)))
+      (all-triggers! this state-event))
     this))
 
 (defn fire-state-event [windows-state state-event]

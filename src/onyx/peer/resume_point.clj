@@ -91,7 +91,7 @@
         (map vector 
              (into (vec (sort (map :window/id windows)))
                    (sort (map (juxt :trigger/id :trigger/window-id) triggers))) 
-             (map short (range -32768 32767)))))
+             (map short (range Short/MIN_VALUE Short/MAX_VALUE)))))
 
 (defn recover-windows
   [{:keys [onyx.core/windows onyx.core/triggers onyx.core/task-id onyx.core/slot-id onyx.core/task-map] :as event}
